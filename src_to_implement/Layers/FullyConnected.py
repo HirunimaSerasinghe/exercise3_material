@@ -36,7 +36,7 @@ mizer in your backward pass, in order to update your weights. Dont perform an
 
 """
 # i have to update the weights and biases here 
-"""
+
 import numpy as np
 from Layers.Base import BaseLayer
 
@@ -50,6 +50,7 @@ class FullyConnected(BaseLayer):
         self.bias = None
         self.optimizer = None
         self._gradient_weights = None
+        self.regularizer = None
 
     def initialize(self, weights_initializer, bias_initializer):
         w = weights_initializer.initialize((self.input_size, self.output_size), self.input_size, self.output_size)
@@ -58,6 +59,7 @@ class FullyConnected(BaseLayer):
                     
     def forward(self, input_tensor):
         self.input_tensor = input_tensor
+        print(f"Setting input_tensor in forward pass: {input_tensor}")
         # Bias-Spalte anhängen
         batch_size = input_tensor.shape[0]
         bias_col = np.ones((batch_size, 1))
@@ -66,6 +68,8 @@ class FullyConnected(BaseLayer):
         return output_tensor
 
     def backward(self, error_tensor):
+        if self.input_tensor is None:
+            raise ValueError("forward() must be called before backward()")
         batch_size = self.input_tensor.shape[0]
         bias_col = np.ones((batch_size, 1))
         input_with_bias = np.hstack((self.input_tensor, bias_col))
@@ -84,7 +88,11 @@ class FullyConnected(BaseLayer):
         error_tensor_prev = error_tensor @ self.weights[:-1].T
         return error_tensor_prev
 
-
+    def norm(self):
+        """Compute the regularization norm for this layer."""
+        if self.regularizer is not None:
+            return self.regularizer.norm(self.weights)
+        return 0
 
     @property
     def gradient_weights(self):
@@ -97,8 +105,8 @@ class FullyConnected(BaseLayer):
     @optimizer.setter
     def optimizer(self, optimizer):
         self._optimizer = optimizer
-"""
 
+"""
 import numpy as np
 
 class FullyConnected:
@@ -134,3 +142,5 @@ class FullyConnected:
         if self.regularizer:
             return self.regularizer.norm(self.weights)
         return 0
+
+"""
