@@ -12,7 +12,6 @@ class Optimizer:
 
 
 
-
 class Sgd(Optimizer):
     def __init__(self, learning_rate):
         super().__init__(learning_rate)

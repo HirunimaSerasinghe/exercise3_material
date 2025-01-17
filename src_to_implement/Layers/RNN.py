@@ -13,7 +13,7 @@ class RNN:
         # Initialize hidden state
         self.hidden_state = np.zeros((1, hidden_size))
 
-        # Memorize flag
+        # Memorize flags
         self.memorize = False
 
         # Trainable layers
@@ -71,11 +71,11 @@ class RNN:
 
     @property
     def weights(self):
-        return {
-            'input_to_hidden': self.input_to_hidden.weights,
-            'hidden_to_hidden': self.hidden_to_hidden.weights,
-            'hidden_to_output': self.hidden_to_output.weights
-        }
+        return np.concatenate([
+            self.input_to_hidden.weights.flatten(),
+            self.hidden_to_hidden.weights.flatten(),
+            self.hidden_to_output.weights.flatten()
+        ])
 
     @weights.setter
     def weights(self, weight_dict):
