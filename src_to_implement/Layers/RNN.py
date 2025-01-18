@@ -1,25 +1,17 @@
 import numpy as np
 from Layers.FullyConnected import FullyConnected
 
-
-
 class RNN:
-    def __init__(self, input_size, hidden_size, output_size):
+    def __init__(self, input_size, hidden_size, output_size=3):  # Set output_size to 3 by default
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.output_size = output_size
-        self.trainable=True
-
-        # Initialize hidden state
+        self.trainable = True
         self.hidden_state = np.zeros((1, hidden_size))
-
-        # Memorize flags
         self.memorize = False
-
-        # Trainable layers
         self.input_to_hidden = FullyConnected(input_size, hidden_size)
         self.hidden_to_hidden = FullyConnected(hidden_size, hidden_size)
-        self.hidden_to_output = FullyConnected(hidden_size, output_size)
+        self.hidden_to_output = FullyConnected(hidden_size, output_size)  # Ensure output_size = 3
 
     def norm(self):
         if self.regularizer:
@@ -27,32 +19,46 @@ class RNN:
         return 0
 
     def forward(self, input_tensor):
-        # Handle both 2D and 3D inputs
-        if len(input_tensor.shape) == 2:  # Single time step input
-            input_tensor = input_tensor[:, None, :]  # Add a time dimension (sequence_length = 1)
+        if len(input_tensor.shape) == 2: 
+            input_tensor = input_tensor[:, None, :] 
 
         batch_size, sequence_length, input_dim = input_tensor.shape
         hidden_states = []
 
-        # Initialize hidden state if necessary
         if not self.memorize or self.hidden_state is None:
             self.hidden_state = np.zeros((batch_size, self.hidden_to_hidden.input_size))
 
-        # Iterate over the sequence
+        # Iterate over each time step in the sequence
         for t in range(sequence_length):
             input_t = input_tensor[:, t, :]  # Input at time step t
             self.hidden_state = np.tanh(
-                self.input_to_hidden.forward(input_t) +
+                self.input_to_hidden.forward(input_t) + 
                 self.hidden_to_hidden.forward(self.hidden_state)
             )
+            
+            # Print hidden state shape after each time step
+            print(f"Hidden state shape after time step {t}: {self.hidden_state.shape}")
+            
             hidden_states.append(self.hidden_state)
 
-        return np.stack(hidden_states, axis=1)  # Return all hidden states
+        # Only return the last hidden state, which is used for classification
+        print(f"RNN output shape (last hidden state): {self.hidden_state.shape}")
+        
+        # Apply the fully connected layer to map the last hidden state to the desired output shape
+        output = self.hidden_to_output.forward(self.hidden_state)  # Shape: (batch_size, 3)
+
+        return output  # Shape: (batch_size, 3)
+
 
     def backward(self, error_tensor):
         """
         Perform the backward pass for the RNN using Backpropagation Through Time (BPTT).
+        Ensure error_tensor is 3D: (batch_size, sequence_length, output_size)
         """
+        # If error_tensor is 2D (batch_size, output_size), add a time dimension (sequence_length = 1)
+        if len(error_tensor.shape) == 2:
+            error_tensor = error_tensor[:, None, :]
+
         batch_size, sequence_length, _ = error_tensor.shape
         d_hidden_next = np.zeros_like(self.hidden_state)
 
@@ -69,6 +75,7 @@ class RNN:
 
         return d_hidden_next
 
+
     @property
     def weights(self):
         return np.concatenate([
@@ -77,17 +84,20 @@ class RNN:
             self.hidden_to_output.weights.flatten()
         ])
 
+
     @weights.setter
     def weights(self, weight_dict):
+        print("Weight dictionary:", weight_dict)  # Debugging print
         self.input_to_hidden.weights = weight_dict['input_to_hidden']
         self.hidden_to_hidden.weights = weight_dict['hidden_to_hidden']
         self.hidden_to_output.weights = weight_dict['hidden_to_output']
 
+
     def calculate_regularization_loss(self):
         return (
-                self.input_to_hidden.calculate_regularization_loss() +
-                self.hidden_to_hidden.calculate_regularization_loss() +
-                self.hidden_to_output.calculate_regularization_loss()
+            self.input_to_hidden.calculate_regularization_loss() +
+            self.hidden_to_hidden.calculate_regularization_loss() +
+            self.hidden_to_output.calculate_regularization_loss()
         )
 
     def initialize(self, weights_initializer, bias_initializer):

@@ -147,15 +147,17 @@ class NeuralNetwork:
                 regularization_loss += layer.regularizer.norm(layer.weights)
         return regularization_loss
 
+
     def train(self, iterations):
         self.phase = "train"
         for _ in range(iterations):
             # Forward pass
             prediction_tensor = self.forward()
 
+
             # Compute data loss
             loss_value = self.loss_layer.forward(prediction_tensor, self.current_label_tensor)
-
+            
             # Compute regularization loss
             regularization_loss = self.compute_regularization_loss()
 
@@ -165,7 +167,6 @@ class NeuralNetwork:
 
             # Backward pass
             self.backward(self.current_label_tensor)
-
 
     def test(self, input_tensor):
         self.phase = "test"

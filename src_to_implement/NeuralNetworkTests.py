@@ -1601,7 +1601,8 @@ class TestNeuralNetwork3(unittest.TestCase):
         out = net.forward()
         out2 = net.forward()
 
-        self.assertNotEqual(out, out2)
+        #self.assertNotEqual(out, out2)
+        self.assertFalse(np.array_equal(out, out2))
 
     def test_iris_data(self):
         np.random.seed(None)
