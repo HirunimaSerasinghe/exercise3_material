@@ -16,6 +16,7 @@ class BatchNormalization:
         self.testing_phase = False
         self.weights = None
         self.bias = None
+        self.input_tensor = None
 
     def initialize(self, weights_initializer=None, bias_initializer=None):
         if weights_initializer is None:
@@ -27,6 +28,7 @@ class BatchNormalization:
 
 
     def forward(self, input_tensor, is_training=True, weights_initializer=None, bias_initializer=None):
+        self.input_tensor = input_tensor
         if self.weights is None or self.bias is None:
             self.initialize(weights_initializer, bias_initializer)
 
@@ -66,40 +68,97 @@ class BatchNormalization:
 
         return output_tensor
 
+    """def backward(self, error_tensor):
+        if self.input_tensor is None:
+            raise ValueError("Forward pass must be called before backward pass.")
 
-    def backward(self, error_tensor):
-        if len(error_tensor.shape) == 4:  
-            axes = (0, 2, 3) 
-        else:  
-            axes = 0  
+        if len(error_tensor.shape) == 4:  # Convolutional input
+            axes = (0, 2, 3)  # Reduce over batch, height, and width
+            reshaped_weights = self.weights[:, None, None]
+        else:  # Fully connected input
+            axes = 0  # Reduce over batch
+            reshaped_weights = self.weights
 
         batch_size = error_tensor.shape[0]
 
+        # Gradients for gamma (weights) and beta (bias)
         self.gradient_weights = np.sum(error_tensor * self.normalized_input, axis=axes, keepdims=False)
         self.gradient_bias = np.sum(error_tensor, axis=axes, keepdims=False)
 
-        d_normalized_input = error_tensor * (
-            self.weights[:, None, None] if len(error_tensor.shape) == 4 else self.weights
-        )
+        # Gradient of normalized input
+        d_normalized_input = error_tensor * reshaped_weights
 
+        # Gradient with respect to variance
         d_variance = np.sum(
-            d_normalized_input * (self.normalized_input * -0.5) / (self.batch_variance + self.epsilon) ** 1.5,
+            d_normalized_input * (self.input_tensor - self.batch_mean) * -0.5
+            / (self.batch_variance + self.epsilon) ** 1.5,
             axis=axes,
-            keepdims=True,
+            keepdims=True
         )
-
         d_mean = np.sum(
             d_normalized_input * -1 / np.sqrt(self.batch_variance + self.epsilon),
             axis=axes,
-            keepdims=True,
-        ) + d_variance * np.sum(-2 * (self.normalized_input), axis=axes, keepdims=True) / batch_size
+            keepdims=True
+        ) + d_variance * np.sum(-2 * (self.input_tensor - self.batch_mean), axis=axes, keepdims=True) / batch_size
 
         input_gradient = (
                 d_normalized_input / np.sqrt(self.batch_variance + self.epsilon)
-                + d_variance * 2 * (self.normalized_input) / batch_size
+                + d_variance * 2 * (self.input_tensor - self.batch_mean) / batch_size
                 + d_mean / batch_size
         )
 
+        # Update weights and bias if an optimizer is set
+        if self.optimizer:
+            self.weights = self.optimizer.calculate_update(self.weights, self.gradient_weights)
+            self.bias = self.optimizer.calculate_update(self.bias, self.gradient_bias)
+
+        return input_gradient"""
+
+    def backward(self, error_tensor):
+        if len(error_tensor.shape) == 4:  # Convolutional input
+            axes = (0, 2, 3)  # Reduce over batch, height, and width
+            reshaped_weights = self.weights[:, None, None]
+        else:  # Fully connected input
+            axes = 0  # Reduce over batch
+            reshaped_weights = self.weights
+
+        if isinstance(axes, int):
+            # If axes is an integer, directly extract the dimension size
+            batch_size = error_tensor.shape[axes]
+        else:
+            # If axes is a tuple, compute the product of the dimensions along the specified axes
+            batch_size = np.prod([error_tensor.shape[axis] for axis in axes])
+
+        # Gradients for weights (gamma) and bias (beta)
+        self.gradient_weights = np.sum(error_tensor * self.normalized_input, axis=axes, keepdims=False)
+        self.gradient_bias = np.sum(error_tensor, axis=axes, keepdims=False)
+
+        # Gradient of normalized input
+        d_normalized_input = error_tensor * reshaped_weights
+
+        # Gradient with respect to variance
+        d_variance = np.sum(
+            d_normalized_input * (self.input_tensor - self.batch_mean) * -0.5
+            / (self.batch_variance + self.epsilon) ** 1.5,
+            axis=axes,
+            keepdims=True
+        )
+
+        # Gradient with respect to mean
+        d_mean = np.sum(
+            d_normalized_input * -1 / np.sqrt(self.batch_variance + self.epsilon),
+            axis=axes,
+            keepdims=True
+        ) + d_variance * np.sum(-2 * (self.input_tensor - self.batch_mean), axis=axes, keepdims=True) / batch_size
+
+        # Gradient with respect to input tensor
+        input_gradient = (
+                d_normalized_input / np.sqrt(self.batch_variance + self.epsilon)
+                + d_variance * 2 * (self.input_tensor - self.batch_mean) / batch_size
+                + d_mean / batch_size
+        )
+
+        # Update weights and bias if an optimizer is set
         if self.optimizer:
             self.weights = self.optimizer.calculate_update(self.weights, self.gradient_weights)
             self.bias = self.optimizer.calculate_update(self.bias, self.gradient_bias)
@@ -107,6 +166,7 @@ class BatchNormalization:
         return input_gradient
 
     def reformat(self, tensor):
+
         if len(tensor.shape) == 4:  # Image-like to vector-like
             batch_size, channels, height, width = tensor.shape
             if channels != self.channels:
